@@ -1,17 +1,41 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { User, UserSchema } from './schemas/user.schema';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { hashPassword } from 'src/utils/helpers';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { User } from './schemas/user.schema';
 
 @Injectable()
 export class UsersService {
   constructor(@InjectModel(User.name) private userModel: Model<User>) {}
 
-  async createUser(createUserDto: CreateUserDto): Promise<User> {
-    const createdUser = new this.userModel(createUserDto);
-    return createdUser.save();
+  async isEmailExist(email: string): Promise<boolean> {
+    const isExist = await this.userModel.exists({ email });
+    return isExist ? true : false;
+  }
+
+  async createUser(createUserDto: CreateUserDto): Promise<{ _id: any }> {
+    const { email, password } = createUserDto;
+    try {
+      const isAlreadyEmail = await this.isEmailExist(email);
+      if (isAlreadyEmail)
+        throw new BadRequestException(
+          `Email ${email} is already exist. Please register again.`,
+        );
+
+      const passwordHashed = await hashPassword(password);
+      const createdUser = await this.userModel.create({
+        email,
+        password: passwordHashed,
+      });
+
+      return {
+        _id: createdUser._id,
+      };
+    } catch (error) {
+      throw error;
+    }
   }
 
   async getUsers(): Promise<User[]> {
